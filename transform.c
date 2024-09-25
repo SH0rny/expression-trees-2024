@@ -310,6 +310,67 @@ static bool fold_multipliers_to_diff_of_squares(Expression* const expression)
 	return false;
 }
 
+static bool reduce_exponentiation(Expression* const expr) {
+    assert(expr != NULL);
+
+    switch (expr->type) {
+        case ExpressionType_Unary: {
+            UnaryExpression* const unary_expr = (UnaryExpression*)expr;
+            return reduce_exponentiation(unary_expr->subexpression);
+        }
+        case ExpressionType_Binary: {
+            BinaryExpression* const bin_expr = (BinaryExpression*)expr;
+
+            // Рекурсивно обрабатываем подвыражения
+            bool found_in_subexprs = reduce_exponentiation(bin_expr->left) |
+                                      reduce_exponentiation(bin_expr->right);
+
+            // Проверяем на операцию возведения в степень
+            if (bin_expr->operator == 2) { // 2 - Exponent
+                if (bin_expr->right->type == ExpressionType_Literal) {
+                    Literal* const exponent_val = (Literal*)bin_expr->right;
+                    if (exponent_val->number == 3.0) { // Проверяем степень 3
+                        // Создаем новое произведение
+                        BinaryExpression* new_product = malloc(sizeof(BinaryExpression));
+                        new_product->base.type = ExpressionType_Binary;
+                        new_product->operator = 1; // 1 - Multiply
+
+                        // Создаем три копии левого выражения
+                        new_product->left = malloc(sizeof(BinaryExpression));
+                        new_product->left->base.type = ExpressionType_Binary;
+                        new_product->left->operator = 1; // Multiply
+                        new_product->left->left = bin_expr->left; // a
+                        new_product->left->right = bin_expr->left; // a
+
+                        BinaryExpression* temp_product = malloc(sizeof(BinaryExpression));
+                        temp_product->base.type = ExpressionType_Binary;
+                        temp_product->operator = 1; // Multiply
+                        temp_product->left = new_product->left; // a * a
+                        temp_product->right = bin_expr->left; // a
+
+                        new_product->right = temp_product; // (a * a) * a
+
+                        // Заменяем старое выражение новым произведением
+                        free(bin_expr);
+                        expr = (Expression*)new_product;
+
+                        return true;
+                    }
+                }
+            }
+
+            return found_in_subexprs;
+        }
+        case ExpressionType_Exponent:
+            return false; // Не обрабатываем Exponent здесь, это уже обрабатывается в Binary
+        case ExpressionType_Literal:
+            return false; // Литеральные значения не обрабатываются
+    }
+
+    return false;
+}
+
+
 //
 // Helper functions
 //
